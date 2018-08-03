@@ -23,6 +23,7 @@ import matplotlib.path as mpltPath
 import pickle
 import concurrent.futures
 import multiprocessing
+from tqdm import tqdm
 
 import shapefileAnalysis03a
 
@@ -50,12 +51,15 @@ numPlots = shape.GetFeatureCount()
 pxMin = 0.5
 pxMax = 20.0
 pxStep = 0.5
+#pxStep = 5
 
 thetaMin = 0.0
 thetaMax = math.pi
 thetaStep = 0.05
+#thetaStep = 1.0
 
 shiftSteps = 16
+#shiftSteps = 4
 numShifts = shiftSteps**2
 
 # store metadata in dictionary
@@ -101,65 +105,66 @@ plotMinRects = []
 #     p.join()
 # 
 
-## basic approach
+## brute force approach
 
-for FID in range(startFID, endFID):
+for FID in tqdm(range(startFID, endFID), desc='FID loop'):
 
     res, landedPxArr, plotMinRect = shapefileAnalysis03a.simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
     
-    results.append(res)
-    landedPixels.append(landedPxArr)
-    plotMinRects.append(plotMinRect)
-
-    pickle.dump(landedPixels, open(rsltPath+'landedPixels_'+
-                                str(startFID).zfill(4)+'-'+
-                                str(FID).zfill(4)+'.p', 'wb'))
-    pickle.dump(plotMinRects, open(rsltPath+'plotMinRects_'+
-                                str(startFID).zfill(4)+'-'+
-                                str(FID).zfill(4)+'.p', 'wb'))
+    # (results stored from within simulateFID function)
+    # results.append(res)
+    # landedPixels.append(landedPxArr)
+    # plotMinRects.append(plotMinRect)
+    # 
+    # pickle.dump(landedPixels, open(rsltPath+'landedPixels_'+
+    #                             str(startFID).zfill(4)+'-'+
+    #                             str(FID).zfill(4)+'.p', 'wb'))
+    # pickle.dump(plotMinRects, open(rsltPath+'plotMinRects_'+
+    #                             str(startFID).zfill(4)+'-'+
+    #                             str(FID).zfill(4)+'.p', 'wb'))
 
 
 ## collect bounding box data
-bboxData = []
+# bboxData = []
 
-startFID = 0
-for FID in range(0, numPlots):
-    print('FID = '+str(FID) + ' of ' + str(numPlots))
+# startFID = 0
+# for FID in range(0, numPlots):
+#     print('FID = '+str(FID) + ' of ' + str(numPlots))
     
-    plotF = shape.GetFeature(FID)
-    plotJ = json.loads(plotF.ExportToJson())
-    plotArr = np.array(plotJ['geometry']['coordinates'][0])
+#     plotF = shape.GetFeature(FID)
+#     plotJ = json.loads(plotF.ExportToJson())
+#     plotArr = np.array(plotJ['geometry']['coordinates'][0])
     
-    # shift plot to origin
-    plotArr = plotArr - plotArr.min(0)
+#     # shift plot to origin
+#     plotArr = plotArr - plotArr.min(0)
     
-    # define bounding box
-    plotDims = plotArr.max(0)
+#     # define bounding box
+#     plotDims = plotArr.max(0)
     
-    bboxDataRow = []
-    rotatedArr = np.zeros(plotArr.shape, dtype=np.float64)
-    for theta in thetaRange:
-    	# rotate shape, point by point, about origin, by theta
-        for i in range(len(plotArr)):
-            x1, y1 = plotArr[i]
+#     bboxDataRow = []
+#     rotatedArr = np.zeros(plotArr.shape, dtype=np.float64)
+#     for theta in thetaRange:
+#     	# rotate shape, point by point, about origin, by theta
+#         for i in range(len(plotArr)):
+#             x1, y1 = plotArr[i]
             
-            if x1==0 and y1==0:
-                x2,y2 = x1,y1
-            else:
-                h = math.sqrt(x1**2 + y1**2)
-                phi = math.atan(y1/x1)
-                x2 = h*math.cos(theta+phi)
-                y2 = h*math.sin(theta+phi)
-            rotatedArr[i] = (x2, y2)
-        rotatedArr = rotatedArr - rotatedArr.min(0)
+#             if x1==0 and y1==0:
+#                 x2,y2 = x1,y1
+#             else:
+#                 h = math.sqrt(x1**2 + y1**2)
+#                 phi = math.atan(y1/x1)
+#                 x2 = h*math.cos(theta+phi)
+#                 y2 = h*math.sin(theta+phi)
+#             rotatedArr[i] = (x2, y2)
+#         rotatedArr = rotatedArr - rotatedArr.min(0)
         
-        # store maximum x and y components of rotated plot array
-        bboxDataRow.append(rotatedArr.max(0))
-    bboxData.append(bboxDataRow)
+#         # store maximum x and y components of rotated plot array
+#         bboxDataRow.append(rotatedArr.max(0))
+#     bboxData.append(bboxDataRow)
 
-bboxDataArr = np.array(bboxData)
+# bboxDataArr = np.array(bboxData)
 
-pickle.dump(bboxDataArr, open(rsltPath+'bboxData.pkl', 'wb'))
+# pickle.dump(bboxDataArr, open(rsltPath+'bboxData.pkl', 'wb'))
 
 
 

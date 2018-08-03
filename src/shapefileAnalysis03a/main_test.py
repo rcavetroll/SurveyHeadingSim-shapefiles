@@ -106,18 +106,17 @@ plotMinRects = []
 for FID in range(startFID, endFID):
 
     res, landedPxArr, plotMinRect = shapefileAnalysis03a.simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
+    
+    results.append(res)
+    landedPixels.append(landedPxArr)
+    plotMinRects.append(plotMinRect)
 
-    # Store results (now done from within simulateFID fn)
-    # results.append(res)
-    # landedPixels.append(landedPxArr)
-    # plotMinRects.append(plotMinRect)
-
-   ##   pickle.dump(landedPixels, open(rsltPath+'landedPixels_'+
-    #                             str(startFID).zfill(4)+'-'+
-    #                             str(FID).zfill(4)+'.p', 'wb'))
-    # pickle.dump(plotMinRects, open(rsltPath+'plotMinRects_'+
-    #                             str(startFID).zfill(4)+'-'+
-    #                             str(FID).zfill(4)+'.p', 'wb'))
+    pickle.dump(landedPixels, open(rsltPath+'landedPixels_'+
+                                str(startFID).zfill(4)+'-'+
+                                str(FID).zfill(4)+'.p', 'wb'))
+    pickle.dump(plotMinRects, open(rsltPath+'plotMinRects_'+
+                                str(startFID).zfill(4)+'-'+
+                                str(FID).zfill(4)+'.p', 'wb'))
 
 
 ## collect bounding box data

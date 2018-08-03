@@ -3,74 +3,67 @@
 import math
 import numpy as np
 import cv2
-from math import cos as cos
-from math import sin as sin
+#from math import cos as cos
+#from math import sin as sin
 from osgeo import ogr
 import json
 import matplotlib.path as mpltPath
 import pickle
 
+from tqdm import tqdm
+
+# numpy versions of trig funcs are vectorized 
+# so you can use them on all elements of an array simultaneously
+sin = np.sin
+cos = np.cos
 
 
 def pixelCenters(px, py, shiftx, shifty, theta, plotXmax, plotYmax):
     """
     Inputs the parameters of a raster mesh, and returns a list of pixels 
     within that mesh, and within the [0,plotXmax] and [0,plotYmax] extent.
+    
+    thanasi - rewrite seems to speed up by ~100x on 100x100 grid
     """
     
-    pxlCntrs = []
     hypot = math.sqrt(plotXmax**2 + plotYmax**2)
 
     bbH = plotYmax # bounding box height
     bbW = plotXmax # bounding box width
     
-    # iterate over original oversized array (before rotation)
-    # - oversized array contains any point that could be rotated *into* the 
-    #   extent window of the main image bounding box.
-    # - oversized array: X: [-hypot,hypot], Y: [-hypot, bbH]
-    # - extracting pixel *centers* from this 2D range
-    # for queryx in np.arange(-px+px/2, hypot+px/2, px):
-    for queryx in np.arange(-hypot+px/2, hypot+px/2, px):
-        for queryy in reversed(np.arange(-py+py/2, -hypot+py/2, -py)):
-            # translate queryPt in linear space
-            qx = queryx + shiftx
-            qy = queryy + shifty
-            
-            # rotate about origin
-            if qx != 0:
-                phi = math.atan(qy/qx)
-            else:
-                phi = math.pi/2
-            h = math.sqrt(qx**2 + qy**2)
-            qx = h * math.cos(theta+phi)
-            qy = h * math.sin(theta+phi)
-            
-            if 0 < qx < bbW and 0 < qy < bbH:
-                pxlCntrs.append((qx, qy))
-        
-        for queryy in np.arange(py/2, bbH+py/2, py):
-            # translate queryPt in linear space
-            qx = queryx + shiftx
-            qy = queryy + shifty
-            
-            # rotate about origin
-            if qx != 0:
-                phi = math.atan(qy/qx)
-            else:
-                phi = math.pi/2
-            h = math.sqrt(qx**2 + qy**2)
-            qx = h * math.cos(theta+phi)
-            qy = h * math.sin(theta+phi)
-            
-            if 0 < qx < bbW and 0 < qy < bbH:
-                pxlCntrs.append((qx, qy))
-
-    return pxlCntrs
+    # generate oversize grid of centers (qx,qy)
+    qx, qy = np.mgrid[-hypot-px/2 : hypot+px/2 : px, 
+                      -hypot-py/2 : hypot+py/2 : py]
+    
+    # make into 1d arrays and shift as desired
+    qx = qx.ravel() + shiftx
+    qy = qy.ravel() + shifty
+    
+    # make rotation matrix
+    rotmat = np.asarray([[cos(theta), -sin(theta)],
+                         [sin(theta), cos(theta)]])
+    
+    # and stack centers into a 2xN matrix
+    qxy = np.vstack([qx[np.newaxis, :], qy[np.newaxis,:]])
+    
+    # rotate centers 
+    qxy2 = rotmat @ qxy
+    
+    # extract rotated centers
+    xc = qxy2[0]
+    yc = qxy2[1]
+    
+    # keep only points that fall strictly within the plot
+    m = (xc > 0) & (xc < bbW) & (yc > 0) & (yc < bbH)
+    
+    # return Nx2 array with only selected points
+    return  qxy2.T[m,:]
 
 
 def pixelCorners(pxlCntrs, px, py, theta):
     """
     Create new array of 4 pixel corners for each pixel center in list 
+    
     """
     numPixels = pxlCntrs.shape[0]
     
@@ -81,15 +74,27 @@ def pixelCorners(pxlCntrs, px, py, theta):
     # create array to populate with corner points
     pxlCrnrs = np.zeros((numPixels, 4, 2))
     
-    for i in range(numPixels):
-        ctr = pxlCntrs[i]
-        
-        cnr1 = (ctr[0]+h2*cos(pi4+theta), ctr[1]+h2*sin(pi4+theta))
-        cnr2 = (ctr[0]+h2*cos(pi4-theta), ctr[1]-h2*sin(pi4-theta))
-        cnr3 = (ctr[0]-h2*cos(pi4+theta), ctr[1]-h2*sin(pi4+theta))
-        cnr4 = (ctr[0]-h2*cos(pi4-theta), ctr[1]+h2*sin(pi4-theta))
 
-        pxlCrnrs[i] = [cnr1, cnr2, cnr3, cnr4]
+    # you can assign these values a bit faster using numpy notation
+    # you could probably even do one better and use some matrix algebra,
+    # but this is a bit more readable and much less work....
+    # i got ~780x speedup on this function call for 100x100 grid
+    
+    # first corner
+    pxlCrnrs[:,0,0] = pxlCntrs[:,0] + h2*cos(pi4+theta) # x
+    pxlCrnrs[:,0,1] = pxlCntrs[:,1] + h2*sin(pi4+theta) # y
+    
+    # second corner
+    pxlCrnrs[:,1,0] = pxlCntrs[:,0] + h2*cos(pi4-theta) # x
+    pxlCrnrs[:,1,1] = pxlCntrs[:,1] - h2*sin(pi4-theta) # y
+    
+    # third corner 
+    pxlCrnrs[:,2,0] = pxlCntrs[:,0] - h2*cos(pi4+theta) # x
+    pxlCrnrs[:,2,1] = pxlCntrs[:,1] - h2*sin(pi4+theta) # y
+    
+    # fourth corner
+    pxlCrnrs[:,3,0] = pxlCntrs[:,0] - h2*cos(pi4-theta) # x
+    pxlCrnrs[:,3,1] = pxlCntrs[:,1] + h2*sin(pi4-theta) # y
 
 
     return pxlCrnrs
@@ -137,44 +142,51 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
     plotArr = np.array(plotJ['geometry']['coordinates'][0])
     
     # shift plot to origin
+    #  AGA:: how is origin defined here?
     plotArr = plotArr - plotArr.min(0)
     
     # define bounding box
     plotDims = plotArr.max(0)
     
-    # create blank image (used for testing)
-    # plotRaster = np.zeros((math.ceil(plotDims[1]), math.ceil(plotDims[0]), 3),
-    #                     dtype=np.uint8)
-    # pts = np.round(plotArr).reshape((-1,1,2)).astype(np.int32)
-    # pts2 = ((0,math.ceil(plotDims[1]))-pts)*(-1,1) # flip vertical component so plot shape is upright
+    # create blank image
+    plotRaster = np.zeros((math.ceil(plotDims[1]), math.ceil(plotDims[0]), 3),
+                        dtype=np.uint8)
+    pts = np.round(plotArr).reshape((-1,1,2)).astype(np.int32)
+    pts2 = ((0,math.ceil(plotDims[1]))-pts)*(-1,1) # flip vertical component so plot shape is upright
     # cv2.polylines(plotRaster, [pts2], True, (255,255,0), 2)
     # cv2.imshow('plotRaster', plotRaster)
     
-    
     ## collect plot statistics
+    
     plotGeom = plotF.GetGeometryRef()
     plotArea = plotGeom.GetArea()
-        
+    
+    # angle of minimum width / minimum width
+    
+    
+    # angle of maximum width / maximum width
+    
     plotXmax = plotDims[0]
     plotYmax = plotDims[1]
     
 
     ## iterate over pxRange and thetaRange to calculate landed pixels
+
     # pre-make data result array
     landedPxArr = np.zeros((len(pxRange), len(thetaRange)), dtype=np.float64)
     landedPixels = []
     plotMinRects = []
     
-    for iPx in range(len(pxRange)):
+    for iPx in tqdm(range(len(pxRange)), desc='iPx loop'):
         px = pxRange[iPx]
         py = px
-        for iTheta in range(len(thetaRange)):
+        for iTheta in tqdm(range(len(thetaRange)), desc='iPx loop', leave=False):
             theta = thetaRange[iTheta]
             print('px = ' + str(px) + ', theta = ' + str(theta))
             
             landedPxTot = 0
             landedPxAvg = 0
-            for shiftx in np.arange(0, px, px/shiftSteps):
+            for shiftx in tqdm(np.arange(0, px, px/shiftSteps).tolist(), desc='shiftx loop', leave=False):
                 for shifty in np.arange(0,py, py/shiftSteps):
                                     
                     pxlCntrs = pixelCenters(px, py, 
@@ -182,7 +194,7 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
                                             plotXmax, plotYmax)
                     pxlCntrs = np.array(pxlCntrs)
                     
-                    # # show pxlCntrs placement (for testing)
+                    # # show pxlCntrs placement
                     # sf = 10
                     # canvasCtrs = np.zeros((sf*math.ceil(plotYmax), sf*math.ceil(plotXmax), 3))
                     # for pt in pxlCntrs:
@@ -194,8 +206,10 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
                     
                     
                     ## test landing of pixels
+                    
                     plotPath = mpltPath.Path(plotArr)
                     pxlCrnrs1col = pxlCrnrs.reshape(-1,2) # reshape array for contains_points fn
+                    
                     pxlsLanded = plotPath.contains_points(pxlCrnrs1col, radius=1e-9)
                     
                     pxlsLanded4 = pxlsLanded.reshape(-1,4) # reshape result back to 4-corners-per-row
@@ -214,11 +228,13 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
 
 
     ## establish angle of minimum width (alpha) for that particular plot
+    
     plotMinRect = cv2.minAreaRect(plotArr.astype(np.float32))
     plotMinRects.append(plotMinRect)
 
 
     ## store data files
+
     pickle.dump(landedPixels, open(rsltPath+'landedPixels_'+
                                    str(FID).zfill(4)+'.p', 'wb'))
     pickle.dump(plotMinRects, open(rsltPath+'plotMinRects_'+

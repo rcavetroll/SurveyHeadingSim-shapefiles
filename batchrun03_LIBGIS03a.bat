@@ -1,0 +1,7 @@
+start cmd.exe /k "C:\Users\mnj\"My Documents"\SHA_2018-08-03\batchrun03_LIBGIS03b.bat 600 700"
+start cmd.exe /k "C:\Users\mnj\"My Documents"\SHA_2018-08-03\batchrun03_LIBGIS03b.bat 700 800"
+start cmd.exe /k "C:\Users\mnj\"My Documents"\SHA_2018-08-03\batchrun03_LIBGIS03b.bat 800 900"
+start cmd.exe /k "C:\Users\mnj\"My Documents"\SHA_2018-08-03\batchrun03_LIBGIS03b.bat 900 1000"
+start cmd.exe /k "C:\Users\mnj\"My Documents"\SHA_2018-08-03\batchrun03_LIBGIS03b.bat 1000 1100"
+start cmd.exe /k "C:\Users\mnj\"My Documents"\SHA_2018-08-03\batchrun03_LIBGIS03b.bat 1100 1200"
+start cmd.exe /k "C:\Users\mnj\"My Documents"\SHA_2018-08-03\batchrun03_LIBGIS03b.bat 1200 1252"

@@ -99,36 +99,6 @@ def pixelCorners(pxlCntrs, px, py, theta):
 
     return pxlCrnrs
     
-    
-
-def format_func(value, tick_number):
-    # find number of multiples of pi/8
-    N = int(np.round(value * 8 / np.pi))
-    if N == 0:
-        return "0"
-    elif N == 1:
-        return r"$\pi/8$"
-    elif N == 2:
-        return r"$\pi/4$"
-    elif N == 3:
-        return r"$3\pi/8$"
-    elif N == 4:
-        return r"$\pi/2$"
-    elif N == 5:
-        return r"$5\pi/8$"
-    elif N == 6:
-        return r"$3\pi/4$"
-    elif N == 7:
-        return r"$7\pi/8$"
-    elif N % 8 > 0:
-        return r"${0}\pi/2$".format(N)
-    else:
-        return r"${0}\pi$".format(N // 2)
-        
-        
-        
-
-   
         
         
 def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath):
@@ -168,7 +138,10 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
     
     plotXmax = plotDims[0]
     plotYmax = plotDims[1]
-    
+    bbH = plotYmax # bounding box height
+    bbW = plotXmax # bounding box width
+    hypot = math.sqrt(plotXmax**2 + plotYmax**2)
+
 
     ## iterate over pxRange and thetaRange to calculate landed pixels
 
@@ -180,19 +153,45 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
     for iPx in tqdm(range(len(pxRange)), desc='iPx loop'):
         px = pxRange[iPx]
         py = px
-        for iTheta in tqdm(range(len(thetaRange)), desc='iPx loop', leave=False):
+
+        # generate oversize grid of centers (qx,qy)
+        qx, qy = np.mgrid[-hypot-px/2 : hypot+px/2 : px, 
+                          -hypot-py/2 : hypot+py/2 : py]
+
+        for iTheta in tqdm(range(len(thetaRange)), desc='iTheta loop', leave=False):
             theta = thetaRange[iTheta]
-            print('px = ' + str(px) + ', theta = ' + str(theta))
+            # print('px = ' + str(px) + ', theta = ' + str(theta))
             
             landedPxTot = 0
             landedPxAvg = 0
+
             for shiftx in tqdm(np.arange(0, px, px/shiftSteps).tolist(), desc='shiftx loop', leave=False):
                 for shifty in np.arange(0,py, py/shiftSteps):
                                     
-                    pxlCntrs = pixelCenters(px, py, 
-                                            shiftx, shifty, theta, 
-                                            plotXmax, plotYmax)
-                    pxlCntrs = np.array(pxlCntrs)
+                    # make into 1d arrays and shift as desired
+                    qx = qx.ravel() + shiftx
+                    qy = qy.ravel() + shifty
+                    
+                    # make rotation matrix
+                    rotmat = np.asarray([[cos(theta), -sin(theta)],
+                                         [sin(theta), cos(theta)]])
+                    
+                    # and stack centers into a 2xN matrix
+                    qxy = np.vstack([qx[np.newaxis, :], qy[np.newaxis,:]])
+                    
+                    # rotate centers 
+                    qxy2 = rotmat @ qxy
+                    
+                    # extract rotated centers
+                    xc = qxy2[0]
+                    yc = qxy2[1]
+                    
+                    # keep only points that fall strictly within the plot
+                    m = (xc > 0) & (xc < bbW) & (yc > 0) & (yc < bbH)
+                    
+                    # return Nx2 array with only selected points
+                    pxlCntrs = qxy2.T[m,:]
+
                     
                     # # show pxlCntrs placement
                     # sf = 10
@@ -214,10 +213,9 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
                     
                     pxlsLanded4 = pxlsLanded.reshape(-1,4) # reshape result back to 4-corners-per-row
                     
-                    landedPx = 0
-                    for pxl in pxlsLanded4:
-                        if pxl.all():
-                            landedPx += 1
+                    # add up pixels for which all 4 corners have landed
+                    sums = pxlsLanded4.sum(axis=1)
+                    landedPx = (sums == 4).sum()
 
                     landedPxTot += landedPx
                     

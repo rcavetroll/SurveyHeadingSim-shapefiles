@@ -27,7 +27,7 @@ def pixelCenters(px, py, shiftx, shifty, theta, plotXmax, plotYmax):
     # iterate over original oversized array (before rotation)
     # - oversized array contains any point that could be rotated *into* the 
     #   extent window of the main image bounding box.
-    # - oversized array: X: [-px,hypot], Y: [-bbW, bbH]
+    # - oversized array: X: [-hypot,hypot], Y: [-hypot, bbH]
     # - extracting pixel *centers* from this 2D range
     # for queryx in np.arange(-px+px/2, hypot+px/2, px):
     for queryx in np.arange(-hypot+px/2, hypot+px/2, px):
@@ -142,30 +142,24 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
     # define bounding box
     plotDims = plotArr.max(0)
     
-    # create blank image
-    plotRaster = np.zeros((math.ceil(plotDims[1]), math.ceil(plotDims[0]), 3),
-                        dtype=np.uint8)
-    pts = np.round(plotArr).reshape((-1,1,2)).astype(np.int32)
-    pts2 = ((0,math.ceil(plotDims[1]))-pts)*(-1,1) # flip vertical component so plot shape is upright
+    # create blank image (used for testing)
+    # plotRaster = np.zeros((math.ceil(plotDims[1]), math.ceil(plotDims[0]), 3),
+    #                     dtype=np.uint8)
+    # pts = np.round(plotArr).reshape((-1,1,2)).astype(np.int32)
+    # pts2 = ((0,math.ceil(plotDims[1]))-pts)*(-1,1) # flip vertical component so plot shape is upright
     # cv2.polylines(plotRaster, [pts2], True, (255,255,0), 2)
     # cv2.imshow('plotRaster', plotRaster)
     
-    ## collect plot statistics
     
+    ## collect plot statistics
     plotGeom = plotF.GetGeometryRef()
     plotArea = plotGeom.GetArea()
-    
-    # angle of minimum width / minimum width
-    
-    
-    # angle of maximum width / maximum width
-    
+        
     plotXmax = plotDims[0]
     plotYmax = plotDims[1]
     
 
     ## iterate over pxRange and thetaRange to calculate landed pixels
-
     # pre-make data result array
     landedPxArr = np.zeros((len(pxRange), len(thetaRange)), dtype=np.float64)
     landedPixels = []
@@ -188,7 +182,7 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
                                             plotXmax, plotYmax)
                     pxlCntrs = np.array(pxlCntrs)
                     
-                    # # show pxlCntrs placement
+                    # # show pxlCntrs placement (for testing)
                     # sf = 10
                     # canvasCtrs = np.zeros((sf*math.ceil(plotYmax), sf*math.ceil(plotXmax), 3))
                     # for pt in pxlCntrs:
@@ -200,10 +194,8 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
                     
                     
                     ## test landing of pixels
-                    
                     plotPath = mpltPath.Path(plotArr)
                     pxlCrnrs1col = pxlCrnrs.reshape(-1,2) # reshape array for contains_points fn
-                    
                     pxlsLanded = plotPath.contains_points(pxlCrnrs1col, radius=1e-9)
                     
                     pxlsLanded4 = pxlsLanded.reshape(-1,4) # reshape result back to 4-corners-per-row
@@ -222,13 +214,11 @@ def simulateFID(FID, shape, numPlots, pxRange, thetaRange, shiftSteps, rsltPath)
 
 
     ## establish angle of minimum width (alpha) for that particular plot
-    
     plotMinRect = cv2.minAreaRect(plotArr.astype(np.float32))
     plotMinRects.append(plotMinRect)
 
 
     ## store data files
-
     pickle.dump(landedPixels, open(rsltPath+'landedPixels_'+
                                    str(FID).zfill(4)+'.p', 'wb'))
     pickle.dump(plotMinRects, open(rsltPath+'plotMinRects_'+
